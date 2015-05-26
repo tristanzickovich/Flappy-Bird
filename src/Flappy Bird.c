@@ -101,7 +101,7 @@ unsigned char cdarr[] = {0x4F, 0x5B, 0x06, 0x3F};
 unsigned char ct_cd = 0, ct_cd_index = 0;
 unsigned char highscore1 = 0, highscore2 = 0;
 unsigned char score1 = 0, score2 = 0;
-unsigned char startgame = 0, playinggame=0;
+unsigned char startgame = 0, playinggame=0, dead=0;
 //--------End Shared Variables-----------------------------
 //--------User defined FSMs--------------------------------
 void handleMessage(){
@@ -146,7 +146,7 @@ int Menu(int state) {
 				ct_cd_index = 0;
 				LCD_ClearScreen();
 				LCD_DisplayString(1, "Score: ");
-				//finish score code here FIXME
+				//finish score code here FIXME  or add to gameplay function
 			}
 			break;
 		case SM1_hold:
@@ -235,26 +235,6 @@ int Menu(int state) {
 	return state;
 }
 
-// --------END User defined FSMs---------------------------
-// Implement scheduler code from PES.
-
-//void transmit_data(unsigned char data) {  //for shift register PINC0-3 single reg
-	//int i;
-	//for (i = 0; i < 8 ; ++i) {
-		//// Sets SRCLR to 1 allowing data to be set
-		//// Also clears SRCLK in preparation of sending data
-		//PORTC = 0x08;
-		//// set SER = next bit of data to be sent.
-		//PORTC |= ((data >> i) & 0x01);
-		//// set SRCLK = 1. Rising edge shifts next bit of data into the shift register
-		//PORTC |= 0x02;
-	//}
-	//// set RCLK = 1. Rising edge copies data from “Shift” register to “Storage” register
-	//PORTC |= 0x04;
-	//// clears all lines in preparation of a new transmission
-	//PORTC = 0x00;
-//}
-
 void transmit_data(unsigned char data, unsigned char data2) { 
 	int i;
 	for (i = 0; i < 8 ; ++i) {
@@ -281,49 +261,16 @@ void transmit_data(unsigned char data, unsigned char data2) {
 	PORTC = 0x00;
 }
 
-//enum SM2_States {sm2_display} state;
-//int Matrix_Tick(int state) {
-	//// === Local Variables ===
-	//static unsigned char column_val = 0x01; // sets the pattern displayed on columns
-	//static unsigned char column_sel = 0x7F; // grounds column to display pattern
-//
-	//// === Transitions ===
-	//switch (state) {
-		//case sm2_display: break;
-		//default: state = sm2_display;
-			//break;
-	//}
-//
-	//// === Actions ===
-	//switch (state) {
-		//case sm2_display: // If illuminated LED in bottom right corner
-		//if (column_sel == 0xFE && column_val == 0x80) {
-			//column_sel = 0x7F; // display far left column
-			//column_val = 0x01; // pattern illuminates top row
-		//}
-		//// else if far right column was last to display (grounded)
-		//else if (column_sel == 0xFE) {
-			//column_sel = 0x7F; // resets display column to far left column
-			//column_val = column_val << 1; // shift down illuminated LED one row
-		//}
-		//// else Shift displayed column one to the right
-		//else {
-			//column_sel = (column_sel >> 1) | 0x80;
-		//}
-		//break;
-		//default: break;
-	//}
-	//transmit_data(column_val, column_sel);
-	//return state;
-//};
-
 unsigned char gamestage[] = {0xF9, 0xF3, 0xE7, 0xCF, 0x9F};
 
-enum SM2_States {sm2_wait, sm2_display} state;
+enum SM2_States {sm2_wait, sm2_display, sm2_gameover, sm2_scores} state;
 int Matrix_Tick(int state) {
 	// === Local Variables ===
 	static unsigned char column_val = 0x00;  // sets the pattern displayed on columns
-	static unsigned char column_sel = 0xFC; // grounds column to display pattern
+	static unsigned char column_sel = 0xFC; // grounds column to display
+	static unsigned char column_bird = 0x7F; //displays bird on far left
+	static unsigned char column_bird_pattern = 0x08;
+	static unsigned long scrollcount = 0;
 
 	// === Transitions ===
 	switch (state) {
@@ -333,29 +280,77 @@ int Matrix_Tick(int state) {
 			else if(playinggame)
 				state = sm2_display;
 			break;
-		case sm2_display: break;
-		default: state = sm2_display;
-		break;
+		case sm2_display: 
+			if(!dead)
+				state = sm2_display;
+			else if(dead){
+				state = sm2_gameover;
+				LCD_ClearScreen();
+				LCD_DisplayString(1, "Game Over!");
+				ct_cd = 0;
+			}
+			break;
+		case sm2_gameover:
+			if(ct_cd<20)
+				state = sm2_gameover;
+			else if (ct_cd>19){
+				state = sm2_scores;
+				ct_cd = 0;
+				//display score and highscore.
+			}
+			break;
+		case sm2_scores:
+			if(ct_cd<20)
+				state = sm2_gameover;
+			else if(ct_cd>19){
+				playinggame = 0;
+				state = sm2_wait;
+			}
+			break;
+		default: 
+			state = sm2_wait;
+			break;
 	}
 
 	// === Actions ===
 	switch (state) {
-		case sm2_display: // If illuminated LED in bottom right corner
-			// if far right column was last to display (grounded)
-			if (column_sel == 0x7F){
-				column_sel = 0xFE; // resets display column to far left column
-				column_val = gamestage[rand()%5];
+		case sm2_display:
+			//first set of if's is for scrolling pipes
+			// if far left column was last to display (grounded)
+			if(scrollcount > 299){
+				scrollcount = 0;
+				if (column_sel == 0x7F){
+					column_sel = 0xFE; // resets display column to far right column
+					column_val = gamestage[rand()%5];
+				}
+				//set up 2 pipes side by side if first column
+				else if (column_sel == 0xFE)
+					column_sel = (column_sel << 1);
+				//Shift displayed column one to the right
+				else
+					column_sel = (column_sel << 1) | 0x01;
 			}
-			else if (column_sel == 0xFE)
-				column_sel = (column_sel << 1);
-			// else Shift displayed column one to the right
-			else
-				column_sel = (column_sel << 1) | 0x01;
+			transmit_data(column_val, column_sel);
+			//displays bird col and position
+			transmit_data(column_bird_pattern, column_bird);
+			++scrollcount;
+			break;
+		case sm2_gameover:
+			++ct_cd;
+			break;
+		case sm2_scores:
+			++ct_cd;
+			break;
 		default: break;
 	}
-	transmit_data(column_val, column_sel);
+	//transmit_data(column_val, column_sel);
 	return state;
-};
+}
+
+enum SM3_States {sm3_control};
+int MoveBird_Tick(int state){
+	//add code for controlling bird and keeping score and tracking life
+}
 
 
 int main()
@@ -368,7 +363,7 @@ int main()
 	// Period for the tasks
 	LCD_init();
 	unsigned long int SMTick1_calc = 200;
-	unsigned long int SMTick2_calc = 300;
+	unsigned long int SMTick2_calc = 1;
 	//Calculating GCD
 	unsigned long int tmpGCD = 1;
 	tmpGCD = findGCD(SMTick1_calc, SMTick2_calc);
