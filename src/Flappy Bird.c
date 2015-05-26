@@ -270,8 +270,8 @@ int Matrix_Tick(int state) {
 	static unsigned char column_sel = 0xFC; // grounds column to display
 	static unsigned char column_bird = 0x7F; //displays bird on far left
 	static unsigned char column_bird_pattern = 0x08;
-	static unsigned long scrollcount = 0;
-
+	static unsigned long scrollcount = 0, fallcount = 0;
+	static unsigned short fallperiod = 2999, fallperiodnew=99;
 	// === Transitions ===
 	switch (state) {
 		case sm2_wait:
@@ -315,7 +315,15 @@ int Matrix_Tick(int state) {
 	// === Actions ===
 	switch (state) {
 		case sm2_display:
-			//first set of if's is for scrolling pipes
+			//displays bird col and position
+			if(fallcount>fallperiod){
+				fallperiod = fallperiodnew;
+				fallcount = 0;
+				if(column_bird_pattern < 0x80)
+					column_bird_pattern = (column_bird_pattern << 1);
+			}
+			transmit_data(column_bird_pattern, column_bird);
+			//display for scrolling pipes
 			// if far left column was last to display (grounded)
 			if(scrollcount > 299){
 				scrollcount = 0;
@@ -331,9 +339,9 @@ int Matrix_Tick(int state) {
 					column_sel = (column_sel << 1) | 0x01;
 			}
 			transmit_data(column_val, column_sel);
-			//displays bird col and position
-			transmit_data(column_bird_pattern, column_bird);
+			
 			++scrollcount;
+			++fallcount;
 			break;
 		case sm2_gameover:
 			++ct_cd;
