@@ -271,7 +271,9 @@ int Matrix_Tick(int state) {
 	static unsigned char column_bird = 0x7F; //displays bird on far left
 	static unsigned char column_bird_pattern = 0x08;
 	static unsigned long scrollcount = 0, fallcount = 0;
-	static unsigned short fallperiod = 2999, fallperiodnew=99;
+	static unsigned short fallperiod = 2999, fallperiodnew=169, raiseperiod = 499;
+	static unsigned char raisebird = 0;
+	static unsigned char buttonreadct = 0;
 	// === Transitions ===
 	switch (state) {
 		case sm2_wait:
@@ -316,7 +318,17 @@ int Matrix_Tick(int state) {
 	switch (state) {
 		case sm2_display:
 			//displays bird col and position
-			if(fallcount>fallperiod){
+			if(!GetBit(PINA, 2) && buttonreadct > 99){
+				 raisebird = 1;
+				 buttonreadct = 0;
+			}
+			if(raisebird){
+				if(column_bird_pattern > 0x01)
+					column_bird_pattern = (column_bird_pattern >> 1);
+				fallperiod = raiseperiod;
+				raisebird = 0;
+			}
+			else if(fallcount>fallperiod){
 				fallperiod = fallperiodnew;
 				fallcount = 0;
 				if(column_bird_pattern < 0x80)
@@ -342,6 +354,7 @@ int Matrix_Tick(int state) {
 			
 			++scrollcount;
 			++fallcount;
+			++buttonreadct;
 			break;
 		case sm2_gameover:
 			++ct_cd;
