@@ -64,7 +64,6 @@ void TimerSet(unsigned long M) {
 	_avr_timer_M = M;
 	_avr_timer_cntcurr = _avr_timer_M;
 }
-unsigned short newb = 0x01;
 //--------Find GCD function -------------------------------
 unsigned long int findGCD (unsigned long int a,
 unsigned long int b)
@@ -112,7 +111,6 @@ void handleMessage(){
 	SM1_output[message_size - 1] = tmp;
 	unsigned char cpos = 1;
 	LCD_ClearScreen();
-	//LCD_DisplayString(1, SM1_output);
 	for(cindex = 0; cindex < 15; ++cindex){
 		LCD_Cursor(cpos);
 		LCD_WriteData(SM1_output[cindex]);
@@ -262,7 +260,7 @@ void transmit_data(unsigned char data, unsigned char data2) {
 }
 
 unsigned char gamestage[] = {0xF9, 0xF3, 0xE7, 0xCF, 0x9F};
-
+unsigned char scoreupdate = 0, firsttime=1;
 enum SM2_States {sm2_wait, sm2_display, sm2_gameover, sm2_scores} state;
 int Matrix_Tick(int state) {
 	// === Local Variables ===
@@ -340,6 +338,16 @@ int Matrix_Tick(int state) {
 			if(scrollcount > 299){
 				scrollcount = 0;
 				if (column_sel == 0x7F){
+					scoreupdate = 1;
+					if(!firsttime){
+						if(score2 < 9)
+						++score2;
+						else{
+							score2=0;
+							++score1;
+						}
+					}
+					firsttime = 0;
 					column_sel = 0xFE; // resets display column to far right column
 					column_val = gamestage[rand()%5];
 				}
@@ -368,11 +376,46 @@ int Matrix_Tick(int state) {
 	return state;
 }
 
-enum SM3_States {sm3_control};
-int MoveBird_Tick(int state){
-	//add code for controlling bird and keeping score and tracking life
+enum SM3_States{sm3_wait, sm3_updatescore};
+int ScoreKeeper (int state){
+	switch(state){
+		case sm3_wait:
+			if(scoreupdate)
+				state = sm3_updatescore;
+			else
+				state = sm3_wait;
+			break;
+		case sm3_updatescore:
+			if(scoreupdate)
+				state = sm3_updatescore;
+			else
+				state = sm3_wait;
+			break;
+		default:
+			state = sm3_wait;
+			break;
+	}
+	switch(state){
+		case sm3_updatescore:
+			if(score1 > 0){
+				LCD_Cursor(8);
+				LCD_WriteData(score1 + '0');
+				LCD_Cursor(9);
+				LCD_WriteData(score2 + '0');
+			}
+			else{
+				LCD_Cursor(8);
+				LCD_WriteData(score2 + '0');
+				LCD_Cursor(9);
+				LCD_WriteData(' ');
+			}
+			scoreupdate = 0;
+			break;
+		default:
+			break;
+	}
+	return state;
 }
-
 
 int main()
 {
@@ -385,18 +428,21 @@ int main()
 	LCD_init();
 	unsigned long int SMTick1_calc = 200;
 	unsigned long int SMTick2_calc = 1;
+	unsigned long int SMTick3_calc = 1;
 	//Calculating GCD
 	unsigned long int tmpGCD = 1;
 	tmpGCD = findGCD(SMTick1_calc, SMTick2_calc);
+	tmpGCD = findGCD(tmpGCD, SMTick3_calc);
 	//Greatest common divisor for all tasks
 	// or smallest time unit for tasks.
 	unsigned long int GCD = tmpGCD;
 	//Recalculate GCD periods for scheduler
 	unsigned long int SMTick1_period = SMTick1_calc/GCD;
 	unsigned long int SMTick2_period = SMTick2_calc/GCD;
+	unsigned long int SMTick3_period = SMTick3_calc/GCD;
 	//Declare an array of tasks
-	static task task1, task2;
-	task *tasks[] = { &task1, &task2};
+	static task task1, task2, task3;
+	task *tasks[] = { &task1, &task2, &task3};
 	const unsigned short numTasks =
 	sizeof(tasks)/sizeof(task*);
 	// Task 1
@@ -409,6 +455,11 @@ int main()
 	task2.period = SMTick2_period;
 	task2.elapsedTime = SMTick2_period;
 	task2.TickFct = &Matrix_Tick;
+	
+	task3.state = sm3_wait;
+	task3.period = SMTick3_period;
+	task3.elapsedTime = SMTick3_period;
+	task3.TickFct = &ScoreKeeper;
 
 	// Set the timer and turn it on
 	TimerSet(GCD);
