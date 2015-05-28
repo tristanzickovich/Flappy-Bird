@@ -283,9 +283,9 @@ int Matrix_Tick(int state) {
 	static unsigned char column_sel = 0xFC, column_sel2 = 0xFC; // grounds column to display
 	static unsigned char column_bird = 0x7F; //displays bird on far left
 	static unsigned char column_bird_pattern = 0x08;
-	static unsigned long scrollcount = 0, fallcount = 0, buttonreadct = 0;
-	static unsigned short fallperiod = 2999, fallperiodnew=249, raiseperiod = 699;
-	static unsigned char raisebird = 0;
+	static unsigned long scrollcount = 0, fallcount = 0;
+	static unsigned short fallperiod = 2999, fallperiodnew=229, raiseperiod = 699;
+	static unsigned char raisebird = 0, waithold = 0;
 	unsigned char loopctr = 0;
 	// === Transitions ===
 	switch (state) {
@@ -303,7 +303,7 @@ int Matrix_Tick(int state) {
 				//reset all game variables
 				column_val = 0x00; column_sel = 0xFC; column_sel2 = 0xFC;
 				column_bird = 0x7F; column_bird_pattern = 0x08;
-				scrollcount = 0; fallcount = 0;  buttonreadct = 0;
+				scrollcount = 0; fallcount = 0;  waithold = 0;
 				raisebird = 0; scoreupdate = 0; firsttime=1, firsttime2=1; dead=0;
 				score1 = 0; score2 = 0;
 				state = sm2_wait;
@@ -366,23 +366,29 @@ int Matrix_Tick(int state) {
 	// === Actions ===
 	switch (state) {
 		case sm2_display:
-			//displays bird col and position
-			if(!GetBit(PINA, 2) && buttonreadct > 179){
+			//checks for raise button
+			if(!GetBit(PINA, 2) && !waithold){
+				 waithold = 1;
 				 raisebird = 1;
-				 buttonreadct = 0;
 			}
+			else if(GetBit(PINA, 2))
+				waithold = 0;
+			//raises bird
 			if(raisebird){
 				if(column_bird_pattern > 0x01)
 					column_bird_pattern = (column_bird_pattern >> 1);
 				fallperiod = raiseperiod;
+				fallcount = 0;
 				raisebird = 0;
 			}
+			//drops bird
 			else if(fallcount>fallperiod){
 				fallperiod = fallperiodnew;
 				fallcount = 0;
 				if(column_bird_pattern < 0x80)
 					column_bird_pattern = (column_bird_pattern << 1);
 			}
+			//updates bird on matrix
 			transmit_data(column_bird_pattern, column_bird);
 			collisiontemp = (column_bird_pattern & column_val);
 			//first pipe in birds column
@@ -401,10 +407,12 @@ int Matrix_Tick(int state) {
 			}
 			//display for scrolling pipes
 			if(scrollcount > 299){
+				//checks for pipe collision
 				if (column_sel2 == column_bird){
 					if(collisiontemp != 0x00){
 						dead = 1;
 					}
+					//increments score if successful
 					else{
 						scoreupdate = 1;
 						if(!firsttime2){
@@ -447,14 +455,13 @@ int Matrix_Tick(int state) {
 			
 			++scrollcount;
 			++fallcount;
-			++buttonreadct;
 			break;
 		case sm2_gameover:
 			//reset all variables
 			if(cd_change == 0){
 				column_val = 0x00; column_sel = 0xFC; column_sel2 = 0xFC;
 				column_bird = 0x7F; column_bird_pattern = 0x08;
-				scrollcount = 0; fallcount = 0;  buttonreadct = 0;
+				scrollcount = 0; fallcount = 0;  waithold = 0;
 				raisebird = 0; scoreupdate = 0; firsttime=1, firsttime2=1; dead=0;
 			}
 			++cd_change;
