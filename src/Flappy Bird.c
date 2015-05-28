@@ -100,7 +100,7 @@ unsigned char cdarr[] = {0x4F, 0x5B, 0x06, 0x3F};
 unsigned char ct_cd = 0, ct_cd_index = 0;
 unsigned char highscore1 = 0, highscore2 = 0;
 unsigned char score1 = 0, score2 = 0;
-unsigned char startgame = 0, playinggame=0, dead=0;
+unsigned char startgame = 0, playinggame=0;
 //--------End Shared Variables-----------------------------
 //--------User defined FSMs--------------------------------
 void handleMessage(){
@@ -260,18 +260,19 @@ void transmit_data(unsigned char data, unsigned char data2) {
 }
 
 unsigned char gamestage[] = {0xF9, 0xF3, 0xE7, 0xCF, 0x9F};
-unsigned char scoreupdate = 0, firsttime=1;
+unsigned char scoreupdate = 0, firsttime=1, firsttime2=1, dead=0;
+unsigned char collisiontemp = 0x00;
+unsigned long cd_change = 0;
 enum SM2_States {sm2_wait, sm2_display, sm2_gameover, sm2_scores} state;
 int Matrix_Tick(int state) {
 	// === Local Variables ===
 	static unsigned char column_val = 0x00;  // sets the pattern displayed on columns
-	static unsigned char column_sel = 0xFC; // grounds column to display
+	static unsigned char column_sel = 0xFC, column_sel2 = 0xFC; // grounds column to display
 	static unsigned char column_bird = 0x7F; //displays bird on far left
 	static unsigned char column_bird_pattern = 0x08;
-	static unsigned long scrollcount = 0, fallcount = 0;
+	static unsigned long scrollcount = 0, fallcount = 0, buttonreadct = 0;
 	static unsigned short fallperiod = 2999, fallperiodnew=169, raiseperiod = 499;
 	static unsigned char raisebird = 0;
-	static unsigned char buttonreadct = 0;
 	// === Transitions ===
 	switch (state) {
 		case sm2_wait:
@@ -287,22 +288,42 @@ int Matrix_Tick(int state) {
 				state = sm2_gameover;
 				LCD_ClearScreen();
 				LCD_DisplayString(1, "Game Over!");
-				ct_cd = 0;
+				cd_change = 0;
 			}
 			break;
 		case sm2_gameover:
-			if(ct_cd<20)
+			if(cd_change<2000)
 				state = sm2_gameover;
-			else if (ct_cd>19){
+			else{
 				state = sm2_scores;
-				ct_cd = 0;
+				cd_change = 0;
 				//display score and highscore.
+				LCD_ClearScreen();
+				LCD_DisplayString(1, "Score: ");
+				LCD_Cursor(8);
+				if(score1>0){
+					LCD_WriteData(score1 + '0');
+					LCD_Cursor(9);
+					LCD_WriteData(score2 + '0');
+				}
+				else
+					LCD_WriteData(score2 + '0');
+					
+				//LCD_DisplayString(17, "Highscore: ");
+				//LCD_Cursor(28);
+				//if(highscore1>0){
+					//LCD_WriteData(highscore1 + '0');
+					//LCD_Cursor(29);
+					//LCD_WriteData(highscore2 + '0');
+				//}
+				//else
+					//LCD_WriteData(highscore2 + '0');
 			}
 			break;
 		case sm2_scores:
-			if(ct_cd<20)
-				state = sm2_gameover;
-			else if(ct_cd>19){
+			if(cd_change<2000)
+				state = sm2_scores;
+			else{
 				playinggame = 0;
 				state = sm2_wait;
 			}
@@ -333,42 +354,83 @@ int Matrix_Tick(int state) {
 					column_bird_pattern = (column_bird_pattern << 1);
 			}
 			transmit_data(column_bird_pattern, column_bird);
+			collisiontemp = (column_bird_pattern & column_val);
+			//first pipe in birds column
+			if(column_sel == column_bird){
+				//bird hit pipe
+				if(collisiontemp != 0x00){
+					dead = 1;
+				}
+			}
+			//second pipe in birds column
+			else if (column_sel2 == column_bird){
+				//bird hit pipe
+				if(collisiontemp != 0x00){
+					dead = 1;
+				}
+			}
 			//display for scrolling pipes
-			// if far left column was last to display (grounded)
 			if(scrollcount > 299){
-				scrollcount = 0;
-				if (column_sel == 0x7F){
-					scoreupdate = 1;
-					if(!firsttime){
-						if(score2 < 9)
-						++score2;
-						else{
-							score2=0;
-							++score1;
+				if (column_sel2 == column_bird){
+					if(collisiontemp != 0x00){
+						dead = 1;
+					}
+					else{
+						scoreupdate = 1;
+						if(!firsttime2){
+							if(score2 < 9)
+							++score2;
+							else{
+								score2=0;
+								++score1;
+							}
 						}
 					}
-					firsttime = 0;
-					column_sel = 0xFE; // resets display column to far right column
-					column_val = gamestage[rand()%5];
+					firsttime2 = 0;
 				}
-				//set up 2 pipes side by side if first column
-				else if (column_sel == 0xFE)
-					column_sel = (column_sel << 1);
-				//Shift displayed column one to the right
-				else
+				scrollcount = 0;
+					//First Pipe
+					if (column_sel == 0xFF){
+						column_sel = 0xFE; // resets display column to far right column
+						column_val = gamestage[rand()%5];
+					}
+					else
 					column_sel = (column_sel << 1) | 0x01;
+					//Second Pipe
+					if(!firsttime){
+						if (column_sel2 == 0xFF){
+							column_sel2 = 0xFE; // resets display column to far right column
+						}
+						else
+						column_sel2 = (column_sel2 << 1) | 0x01;
+					}
+					firsttime = 0;
 			}
-			transmit_data(column_val, column_sel);
+			if(scrollcount%2==0){  //alternates which pipe is displayed first for more even lighting
+				transmit_data(column_val, column_sel2);
+				transmit_data(column_val, column_sel);
+			}
+			else{
+				transmit_data(column_val, column_sel);
+				transmit_data(column_val, column_sel2);
+			}
 			
 			++scrollcount;
 			++fallcount;
 			++buttonreadct;
 			break;
 		case sm2_gameover:
-			++ct_cd;
+			//reset all variables
+			if(cd_change == 0){
+				column_val = 0x00; column_sel = 0xFC; column_sel2 = 0xFC;
+				column_bird = 0x7F; column_bird_pattern = 0x08;
+				scrollcount = 0; fallcount = 0;  buttonreadct = 0;
+				raisebird = 0; scoreupdate = 0; firsttime=1, firsttime2=1; dead=0;
+			}
+			++cd_change;
 			break;
 		case sm2_scores:
-			++ct_cd;
+			++cd_change;
 			break;
 		default: break;
 	}
