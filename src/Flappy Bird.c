@@ -100,7 +100,7 @@ unsigned char cdarr[] = {0x4F, 0x5B, 0x06, 0x3F};
 unsigned char ct_cd = 0, ct_cd_index = 0;
 unsigned char highscore1 = 0, highscore2 = 0;
 unsigned char score1 = 0, score2 = 0;
-unsigned char startgame = 0, playinggame=0;
+unsigned char startgame = 0, playinggame=0, hardreset = 0;
 //--------End Shared Variables-----------------------------
 //--------User defined FSMs--------------------------------
 void handleMessage(){
@@ -155,7 +155,9 @@ int Menu(int state) {
 			}
 			break;
 		case SM1_highscore:
-			if(GetBit(PINA, 3))
+			if(!GetBit(PINA, 4))
+				state = SM1_display;
+			else if(GetBit(PINA, 3))
 				state = SM1_highscore;
 			else if(!GetBit(PINA, 3))
 				state = SM1_hold2;
@@ -167,7 +169,11 @@ int Menu(int state) {
 				state = SM1_display;
 			break;
 		case SM1_CountDown:
-			if(ct_cd < 20)
+			if(!GetBit(PINA, 4)){
+				state = SM1_display;
+				PORTB = 0x00;
+			}
+			else if(ct_cd < 20)
 				state = SM1_CountDown;
 			else if (ct_cd > 19){
 				playinggame = 1;
@@ -176,7 +182,11 @@ int Menu(int state) {
 			}
 			break;
 		case SM1_GamePlay:
-			if(playinggame){
+			if(hardreset){
+				state = SM1_display;
+				hardreset = 0;
+			}
+			else if(playinggame){
 				state = SM1_GamePlay;
 			}
 			else if(!playinggame){
@@ -282,10 +292,22 @@ int Matrix_Tick(int state) {
 				state = sm2_display;
 			break;
 		case sm2_display: 
-			if(!dead)
+			if(!GetBit(PINA, 4)){
+				hardreset = 1;
+				playinggame = 0;
+				transmit_data(0x00, 0xFF); //clear matrix
+				//reset all game variables
+				column_val = 0x00; column_sel = 0xFC; column_sel2 = 0xFC;
+				column_bird = 0x7F; column_bird_pattern = 0x08;
+				scrollcount = 0; fallcount = 0;  buttonreadct = 0;
+				raisebird = 0; scoreupdate = 0; firsttime=1, firsttime2=1; dead=0;
+				state = sm2_wait;
+			}
+			else if(!dead)
 				state = sm2_display;
 			else if(dead){
 				state = sm2_gameover;
+				transmit_data(0x00, 0xFF); //clear matrix
 				LCD_ClearScreen();
 				LCD_DisplayString(1, "Game Over!");
 				cd_change = 0;
