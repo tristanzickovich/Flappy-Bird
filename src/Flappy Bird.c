@@ -211,6 +211,8 @@ int Menu(int state) {
 				}
 				else
 					state = SM1_display;
+				score1 = 0;
+				score2 = 0;
 			}
 			break;
 		case SM1_newhighscore:
@@ -270,6 +272,7 @@ void transmit_data(unsigned char data, unsigned char data2) {
 }
 
 unsigned char gamestage[] = {0xF9, 0xF3, 0xE7, 0xCF, 0x9F};
+unsigned char hsmessage[] = {"Highscore: "}; unsigned char hssize = 11;
 unsigned char scoreupdate = 0, firsttime=1, firsttime2=1, dead=0;
 unsigned char collisiontemp = 0x00;
 unsigned long cd_change = 0;
@@ -281,8 +284,9 @@ int Matrix_Tick(int state) {
 	static unsigned char column_bird = 0x7F; //displays bird on far left
 	static unsigned char column_bird_pattern = 0x08;
 	static unsigned long scrollcount = 0, fallcount = 0, buttonreadct = 0;
-	static unsigned short fallperiod = 2999, fallperiodnew=169, raiseperiod = 499;
+	static unsigned short fallperiod = 2999, fallperiodnew=249, raiseperiod = 699;
 	static unsigned char raisebird = 0;
+	unsigned char loopctr = 0;
 	// === Transitions ===
 	switch (state) {
 		case sm2_wait:
@@ -301,6 +305,7 @@ int Matrix_Tick(int state) {
 				column_bird = 0x7F; column_bird_pattern = 0x08;
 				scrollcount = 0; fallcount = 0;  buttonreadct = 0;
 				raisebird = 0; scoreupdate = 0; firsttime=1, firsttime2=1; dead=0;
+				score1 = 0; score2 = 0;
 				state = sm2_wait;
 			}
 			else if(!dead)
@@ -314,7 +319,7 @@ int Matrix_Tick(int state) {
 			}
 			break;
 		case sm2_gameover:
-			if(cd_change<2000)
+			if(cd_change<4000)
 				state = sm2_gameover;
 			else{
 				state = sm2_scores;
@@ -331,19 +336,22 @@ int Matrix_Tick(int state) {
 				else
 					LCD_WriteData(score2 + '0');
 					
-				//LCD_DisplayString(17, "Highscore: ");
-				//LCD_Cursor(28);
-				//if(highscore1>0){
-					//LCD_WriteData(highscore1 + '0');
-					//LCD_Cursor(29);
-					//LCD_WriteData(highscore2 + '0');
-				//}
-				//else
-					//LCD_WriteData(highscore2 + '0');
+				for(loopctr=0; loopctr<hssize;++loopctr){
+					LCD_Cursor(17+loopctr);
+					LCD_WriteData(hsmessage[loopctr]);
+				}
+				LCD_Cursor(28);
+				if(highscore1>0){
+					LCD_WriteData(highscore1 + '0');
+					LCD_Cursor(29);
+					LCD_WriteData(highscore2 + '0');
+				}
+				else
+					LCD_WriteData(highscore2 + '0');
 			}
 			break;
 		case sm2_scores:
-			if(cd_change<2000)
+			if(cd_change<4000)
 				state = sm2_scores;
 			else{
 				playinggame = 0;
@@ -359,7 +367,7 @@ int Matrix_Tick(int state) {
 	switch (state) {
 		case sm2_display:
 			//displays bird col and position
-			if(!GetBit(PINA, 2) && buttonreadct > 99){
+			if(!GetBit(PINA, 2) && buttonreadct > 179){
 				 raisebird = 1;
 				 buttonreadct = 0;
 			}
