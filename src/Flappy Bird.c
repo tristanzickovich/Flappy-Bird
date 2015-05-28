@@ -98,8 +98,8 @@ unsigned char SM1_output[] = {"     Flappy Bird!     Press A to Play, B for high
 unsigned char message_size = 54;
 unsigned char cdarr[] = {0x4F, 0x5B, 0x06, 0x3F};
 unsigned char ct_cd = 0, ct_cd_index = 0;
-unsigned char highscore1 = 0, highscore2 = 0;
-unsigned char score1 = 0, score2 = 0;
+unsigned char highscore1 = 0, highscore2 = 0, highscore3 = 0;
+unsigned char score1 = 0, score2 = 0, score3 = 0;
 unsigned char startgame = 0, playinggame=0, hardreset = 0;
 //--------End Shared Variables-----------------------------
 //--------User defined FSMs--------------------------------
@@ -134,9 +134,16 @@ int Menu(int state) {
 					LCD_WriteData(highscore1 + '0');
 					LCD_Cursor(13);
 					LCD_WriteData(highscore2 + '0');
+					LCD_Cursor(14);
+					LCD_WriteData(highscore3 + '0');
+				}
+				else if(highscore2>0){
+					LCD_WriteData(highscore2 + '0');
+					LCD_Cursor(13);
+					LCD_WriteData(highscore3 + '0');
 				}
 				else
-					LCD_WriteData(highscore2 + '0');
+					LCD_WriteData(highscore3 + '0');
 			}
 			else if(!GetBit(PINA, 2)&&GetBit(PINA, 3)){
 				state = SM1_CountDown;
@@ -173,7 +180,7 @@ int Menu(int state) {
 				state = SM1_display;
 				PORTB = 0x00;
 			}
-			else if(ct_cd < 20)
+			else if(ct_cd < 64)
 				state = SM1_CountDown;
 			else if (ct_cd > 19){
 				playinggame = 1;
@@ -194,6 +201,7 @@ int Menu(int state) {
 				if(score1>highscore1){
 					highscore1 = score1;
 					highscore2 = score2;
+					highscore3 = score3;
 					state = SM1_newhighscore;
 					LCD_ClearScreen();
 					LCD_DisplayString(1, "New High Score!");
@@ -202,9 +210,22 @@ int Menu(int state) {
 					if(score2>highscore2){
 						highscore1 = score1;
 						highscore2 = score2;
+						highscore3 = score3;
 						state = SM1_newhighscore;
 						LCD_ClearScreen();
 						LCD_DisplayString(1, "New High Score!");
+					}
+					else if(score2 == highscore2){
+						if(score3>highscore3){
+							highscore1 = score1;
+							highscore2 = score2;
+							highscore3 = score3;
+							state = SM1_newhighscore;
+							LCD_ClearScreen();
+							LCD_DisplayString(1, "New High Score!");	
+						}
+						else
+							state = SM1_display;
 					}
 					else
 						state = SM1_display;
@@ -227,10 +248,14 @@ int Menu(int state) {
 	}
 	switch(state){
 		case SM1_display:
-			handleMessage();
+			if(ct_cd > 6){
+				handleMessage();
+				ct_cd=0;
+			}
+			++ct_cd;
 			break;
 		case SM1_CountDown:
-			if(ct_cd%5==0){
+			if(ct_cd%16==0){
 				PORTB = cdarr[ct_cd_index];
 				++ct_cd_index;
 			}
@@ -332,9 +357,16 @@ int Matrix_Tick(int state) {
 					LCD_WriteData(score1 + '0');
 					LCD_Cursor(9);
 					LCD_WriteData(score2 + '0');
+					LCD_Cursor(10);
+					LCD_WriteData(score3 + '0');
+				}
+				else if(score2>0){
+					LCD_WriteData(score2 + '0');
+					LCD_Cursor(9);
+					LCD_WriteData(score3 + '0');
 				}
 				else
-					LCD_WriteData(score2 + '0');
+					LCD_WriteData(score3 + '0');
 					
 				for(loopctr=0; loopctr<hssize;++loopctr){
 					LCD_Cursor(17+loopctr);
@@ -345,9 +377,16 @@ int Matrix_Tick(int state) {
 					LCD_WriteData(highscore1 + '0');
 					LCD_Cursor(29);
 					LCD_WriteData(highscore2 + '0');
+					LCD_Cursor(30);
+					LCD_WriteData(highscore3 + '0');
+				}
+				else if(highscore2>0){
+					LCD_WriteData(highscore2 + '0');
+					LCD_Cursor(29);
+					LCD_WriteData(highscore3 + '0');
 				}
 				else
-					LCD_WriteData(highscore2 + '0');
+					LCD_WriteData(highscore3 + '0');
 			}
 			break;
 		case sm2_scores:
@@ -416,11 +455,16 @@ int Matrix_Tick(int state) {
 					else{
 						scoreupdate = 1;
 						if(!firsttime2){
-							if(score2 < 9)
-							++score2;
+							if(score3 < 9)
+								++score3;
 							else{
-								score2=0;
-								++score1;
+								score3=0;
+								if(score2 < 9)
+									++score2;
+								else{
+									score2 = 0;
+									++score3;
+								}
 							}
 						}
 					}
@@ -496,16 +540,26 @@ int ScoreKeeper (int state){
 	}
 	switch(state){
 		case sm3_updatescore:
+			LCD_Cursor(8);
 			if(score1 > 0){
-				LCD_Cursor(8);
 				LCD_WriteData(score1 + '0');
 				LCD_Cursor(9);
 				LCD_WriteData(score2 + '0');
+				LCD_Cursor(10);
+				LCD_WriteData(score3 + '0');
 			}
-			else{
-				LCD_Cursor(8);
+			else if(score2 > 0){
 				LCD_WriteData(score2 + '0');
 				LCD_Cursor(9);
+				LCD_WriteData(score3 + '0');
+				LCD_Cursor(10);
+				LCD_WriteData(' ');
+			}
+			else{
+				LCD_WriteData(score3 + '0');
+				LCD_Cursor(9);
+				LCD_WriteData(' ');
+				LCD_Cursor(10);
 				LCD_WriteData(' ');
 			}
 			scoreupdate = 0;
@@ -525,7 +579,7 @@ int main()
 	// . . . etc
 	// Period for the tasks
 	LCD_init();
-	unsigned long int SMTick1_calc = 200;
+	unsigned long int SMTick1_calc = 50;
 	unsigned long int SMTick2_calc = 1;
 	unsigned long int SMTick3_calc = 1;
 	//Calculating GCD
