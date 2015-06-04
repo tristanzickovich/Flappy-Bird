@@ -110,7 +110,6 @@ void handleMessage(){
 	}
 	SM1_output[message_size - 1] = tmp;
 	unsigned char cpos = 1;
-	LCD_ClearScreen();
 	for(cindex = 0; cindex < 15; ++cindex){
 		LCD_Cursor(cpos);
 		LCD_WriteData(SM1_output[cindex]);
@@ -118,14 +117,46 @@ void handleMessage(){
 	}
 }
 
+unsigned char NESinput()
+{
+	char porta = 0x04;
+	PORTA = porta |= 0x08;
+	PORTA = porta &= ~0x08;
+	unsigned char pressed = 0;
+	
+	for(unsigned char i = 0; i < 8; ++i)
+	{
+		pressed <<= 1;
+		pressed |= (PINA & 0x04)>>2;
+		PORTA = porta |= 0x10;
+		PORTA = porta &= ~0x10;
+	}
+	return ~pressed;
+}
+
+unsigned char buttonpress(unsigned char button){
+	unsigned char index;
+	unsigned char datainput = NESinput();
+	if(button == 'a')
+		index = 7;
+	else if(button == 'b')
+		index = 6;
+	else
+		index = 5;
+	return GetBit(datainput, index);
+}
+
+
 enum SM1_States {SM1_display, SM1_hold, SM1_highscore, SM1_hold2, SM1_CountDown, SM1_GamePlay, SM1_newhighscore};
 int Menu(int state) {
 	unsigned char hsmessage[15] = {"Highscore: "};
 	switch(state){
 		case SM1_display:
-			if(GetBit(PINA, 2)&&GetBit(PINA, 3))
+			//if(GetBit(PINA, 2)&&GetBit(PINA, 3))
+			if(!buttonpress('a') && !buttonpress('b'))
 				state = SM1_display;
-			else if(GetBit(PINA, 2)&&!GetBit(PINA, 3)){
+			//else if(GetBit(PINA, 2)&&!GetBit(PINA, 3)){
+			else if (!buttonpress('a')&&buttonpress('b')){
 				state = SM1_hold;
 				LCD_ClearScreen();
 				LCD_DisplayString(1, hsmessage);
@@ -145,7 +176,8 @@ int Menu(int state) {
 				else
 					LCD_WriteData(highscore3 + '0');
 			}
-			else if(!GetBit(PINA, 2)&&GetBit(PINA, 3)){
+			//else if(!GetBit(PINA, 2)&&GetBit(PINA, 3)){
+			else if(buttonpress('a')&&!buttonpress('b')){
 				state = SM1_CountDown;
 				ct_cd = 0;
 				ct_cd_index = 0;
@@ -155,28 +187,36 @@ int Menu(int state) {
 			}
 			break;
 		case SM1_hold:
-			if(!GetBit(PINA, 3))
+			//if(!GetBit(PINA, 3))
+			if(buttonpress(('b')))
 				state = SM1_hold;
-			else if(GetBit(PINA, 3)){
+			//else if(GetBit(PINA, 3)){
+			else if(!buttonpress('b')){
 				state = SM1_highscore;
 			}
 			break;
 		case SM1_highscore:
-			if(!GetBit(PINA, 4))
+			//if(!GetBit(PINA, 4))
+			if(buttonpress('s'))
 				state = SM1_display;
-			else if(GetBit(PINA, 3))
+			//else if(GetBit(PINA, 3))
+			else if(!buttonpress('b'))
 				state = SM1_highscore;
-			else if(!GetBit(PINA, 3))
+			//else if(!GetBit(PINA, 3))
+			else if(buttonpress('b'))
 				state = SM1_hold2;
 			break;
 		case SM1_hold2:
-			if(!GetBit(PINA, 3))
+			//if(!GetBit(PINA, 3))
+			if(buttonpress('b'))
 				state = SM1_hold2;
-			else if(GetBit(PINA, 3))
+			//else if(GetBit(PINA, 3))
+			else if(!buttonpress('b'))
 				state = SM1_display;
 			break;
 		case SM1_CountDown:
-			if(!GetBit(PINA, 4)){
+			//if(!GetBit(PINA, 4)){
+			if(buttonpress('s')){
 				state = SM1_display;
 				PORTB = 0x00;
 			}
@@ -234,10 +274,11 @@ int Menu(int state) {
 					state = SM1_display;
 				score1 = 0;
 				score2 = 0;
+				score3 = 0;
 			}
 			break;
 		case SM1_newhighscore:
-			if(ct_cd < 20)
+			if(ct_cd < 40)
 				state = SM1_newhighscore;
 			else
 				state = SM1_display;
@@ -248,7 +289,7 @@ int Menu(int state) {
 	}
 	switch(state){
 		case SM1_display:
-			if(ct_cd > 6){
+			if(ct_cd > 2){
 				handleMessage();
 				ct_cd=0;
 			}
@@ -272,10 +313,19 @@ int Menu(int state) {
 
 void transmit_data(unsigned char data, unsigned char data2) { 
 	int i;
+	//for (i = 0; i < 8 ; ++i) {
+		//// sets srclr to 1 allowing data to be set
+		//// also clears srclk in preparation of sending data
+		//PORTC = 0x08;
+		//// set ser = next bit of data to be sent.
+		//PORTC =0x00;//|= ((0xAA >> i) & 0x01);
+		//// set srclk = 1. rising edge shifts next bit of data into the shift register
+		//PORTC |= 0x02;
+	//}
 	for (i = 0; i < 8 ; ++i) {
 		// Sets SRCLR to 1 allowing data to be set
 		// Also clears SRCLK in preparation of sending data
-		PORTC = 0x18;
+		PORTC = 0x08;
 		// set SER = next bit of data to be sent.
 		PORTC |= ((data >> i) & 0x01);
 		// set SRCLK = 1. Rising edge shifts next bit of data into the shift register
@@ -321,7 +371,8 @@ int Matrix_Tick(int state) {
 				state = sm2_display;
 			break;
 		case sm2_display: 
-			if(!GetBit(PINA, 4)){
+			//if(!GetBit(PINA, 4)){
+			if(buttonpress('s')){
 				hardreset = 1;
 				playinggame = 0;
 				transmit_data(0x00, 0xFF); //clear matrix
@@ -330,7 +381,7 @@ int Matrix_Tick(int state) {
 				column_bird = 0x7F; column_bird_pattern = 0x08;
 				scrollcount = 0; fallcount = 0;  waithold = 0;
 				raisebird = 0; scoreupdate = 0; firsttime=1, firsttime2=1; dead=0;
-				score1 = 0; score2 = 0;
+				score1 = 0; score2 = 0; score3 = 0;
 				state = sm2_wait;
 			}
 			else if(!dead)
@@ -394,6 +445,7 @@ int Matrix_Tick(int state) {
 				state = sm2_scores;
 			else{
 				playinggame = 0;
+				LCD_ClearScreen();
 				state = sm2_wait;
 			}
 			break;
@@ -406,11 +458,13 @@ int Matrix_Tick(int state) {
 	switch (state) {
 		case sm2_display:
 			//checks for raise button
-			if(!GetBit(PINA, 2) && !waithold){
+			//if(!GetBit(PINA, 2) && !waithold){
+			if(buttonpress('a')&&!waithold){
 				 waithold = 1;
 				 raisebird = 1;
 			}
-			else if(GetBit(PINA, 2))
+			//else if(GetBit(PINA, 2))
+			else if(!buttonpress('a'))
 				waithold = 0;
 			//raises bird
 			if(raisebird){
@@ -496,6 +550,7 @@ int Matrix_Tick(int state) {
 				transmit_data(column_val, column_sel);
 				transmit_data(column_val, column_sel2);
 			}
+			//transmit_data(0xFF, 0x00);
 			
 			++scrollcount;
 			++fallcount;
@@ -572,7 +627,7 @@ int ScoreKeeper (int state){
 
 int main()
 {
-	DDRA = 0x03; PORTA = 0xFC;
+	DDRA = 0xFB; PORTA = 0x04;
 	DDRB = 0xFF; PORTB = 0x00;
 	DDRC = 0xFF; PORTC = 0x00;
 	DDRD = 0xFF; PORTD = 0x00;
